@@ -16,10 +16,10 @@ static const VarioConfig DEFAULT_CFG = {
     true,
     true,
     false,
-    0.18f,
     0.10f,
-    -0.40f,
-    -0.20f,
+    0.05f,
+    -0.22f,
+    -0.10f,
     1100,
     280,
     240,
@@ -61,9 +61,9 @@ static void normalizeConfig(VarioConfig &cfg)
     cfg.altitudeOffset_m = clampf(cfg.altitudeOffset_m, -3000.0f, 3000.0f);
     cfg.sensitivity = clampf(cfg.sensitivity, 0.2f, 4.0f);
     cfg.deadZone_mps = clampf(cfg.deadZone_mps, 0.0f, 2.0f);
-    cfg.climbStart_mps = clampf(cfg.climbStart_mps, 0.05f, 5.0f);
-    cfg.climbStop_mps = clampf(cfg.climbStop_mps, 0.0f, cfg.climbStart_mps);
-    cfg.sinkStart_mps = clampf(cfg.sinkStart_mps, -8.0f, -0.1f);
+    cfg.climbStart_mps = clampf(cfg.climbStart_mps, 0.08f, 5.0f);
+    cfg.climbStop_mps = clampf(cfg.climbStop_mps, 0.02f, cfg.climbStart_mps);
+    cfg.sinkStart_mps = clampf(cfg.sinkStart_mps, -8.0f, -0.18f);
     cfg.sinkStop_mps = clampf(cfg.sinkStop_mps, cfg.sinkStart_mps, -0.01f);
     cfg.climbBaseHz = clampi(cfg.climbBaseHz, 400, 2500);
     cfg.climbGainHzPerMps = clampi(cfg.climbGainHzPerMps, 50, 1000);

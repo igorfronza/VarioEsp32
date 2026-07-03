@@ -13,10 +13,10 @@ enum ToneMode
 static ToneMode toneMode = TONE_IDLE;
 
 static SoundConfig g_cfg = {
-    0.18f,
     0.10f,
-    -0.40f,
-    -0.20f,
+    0.05f,
+    -0.22f,
+    -0.10f,
     1100,
     280,
     240,
@@ -43,9 +43,9 @@ static int clampi(int value, int minValue, int maxValue)
 
 static void normalizeConfig(SoundConfig &cfg)
 {
-    cfg.climbStart_mps = clampf(cfg.climbStart_mps, 0.15f, 5.0f);
-    cfg.climbStop_mps = clampf(cfg.climbStop_mps, 0.05f, cfg.climbStart_mps - 0.03f);
-    cfg.sinkStart_mps = clampf(cfg.sinkStart_mps, -8.0f, -0.35f);
+    cfg.climbStart_mps = clampf(cfg.climbStart_mps, 0.08f, 5.0f);
+    cfg.climbStop_mps = clampf(cfg.climbStop_mps, 0.02f, cfg.climbStart_mps - 0.02f);
+    cfg.sinkStart_mps = clampf(cfg.sinkStart_mps, -8.0f, -0.18f);
     cfg.sinkStop_mps = clampf(cfg.sinkStop_mps, cfg.sinkStart_mps, -0.15f);
     cfg.climbBaseHz = clampi(cfg.climbBaseHz, 400, 2500);
     cfg.climbGainHzPerMps = clampi(cfg.climbGainHzPerMps, 50, 1000);
@@ -104,7 +104,8 @@ void soundUpdate(float vario)
 
     if (toneMode == TONE_IDLE)
     {
-        toneStop();
+        if (toneOn)
+            toneStop();
         currentFreq = 0;
         toneOn = false;
         last = millis();
@@ -117,8 +118,8 @@ void soundUpdate(float vario)
         int freq = g_cfg.climbBaseHz + (int)(climb * g_cfg.climbGainHzPerMps);
 
         unsigned long elapsed = millis() - last;
-        unsigned long interval = (unsigned long)clampf(170.0f - climb * 20.0f, 45.0f, 170.0f);
-        unsigned long duration = (unsigned long)clampf(30.0f + climb * 3.0f, 18.0f, interval - 8);
+        unsigned long interval = (unsigned long)clampf(120.0f - climb * 14.0f, 35.0f, 120.0f);
+        unsigned long duration = (unsigned long)clampf(22.0f + climb * 2.5f, 14.0f, interval - 6);
 
         if (!toneOn && elapsed >= interval)
         {
@@ -139,9 +140,9 @@ void soundUpdate(float vario)
 
     float sink = clampf(fabsf(vario), 0.0f, 8.0f);
     int freq = g_cfg.sinkBaseHz + (int)(sink * 40.0f);
-    bool graveEnough = (freq <= 300) || (sink >= 2.0f && freq <= 340);
-    unsigned long interval = (unsigned long)clampf(360.0f - sink * 24.0f, 160.0f, 420.0f);
-    unsigned long duration = (unsigned long)clampf(interval * 0.82f, 70.0f, interval - 14);
+    bool graveEnough = (freq <= 320) || (sink >= 1.6f && freq <= 360);
+    unsigned long interval = (unsigned long)clampf(260.0f - sink * 18.0f, 120.0f, 320.0f);
+    unsigned long duration = (unsigned long)clampf(interval * 0.86f, 60.0f, interval - 12);
 
     unsigned long elapsed = millis() - last;
     if (graveEnough)
