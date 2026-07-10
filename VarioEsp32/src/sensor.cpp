@@ -12,7 +12,7 @@ bool sensorBegin()
 {
     Wire.begin(SDA_PIN, SCL_PIN);
 
-    return bme.begin(0x76);
+    return bme.begin(0x76) || bme.begin(0x77);
 }
 
 float sensorAltitude()

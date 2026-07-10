@@ -45,6 +45,10 @@ static void printConfig(const VarioConfig &cfg)
     Serial.printf("  autozero=%d\n", cfg.autoCalibrateOnBoot ? 1 : 0);
     Serial.printf("  ble=%d\n", cfg.bleEnabled ? 1 : 0);
     Serial.printf("  wifi_sta=%d\n", cfg.wifiStaMode ? 1 : 0);
+    Serial.printf("  battery_pin=%d\n", cfg.batteryAdcPin);
+    Serial.printf("  battery_divider=%.2f\n", cfg.batteryDivider);
+    Serial.printf("  battery_min=%.2f\n", cfg.batteryMinV);
+    Serial.printf("  battery_max=%.2f\n", cfg.batteryMaxV);
 }
 
 static void printHelp()
@@ -60,6 +64,10 @@ static void printHelp()
     Serial.println("  set fast <0|1>");
     Serial.println("  set adapt <0|1>");
     Serial.println("  set autozero <0|1>");
+    Serial.println("  set bpin <gpio>");
+    Serial.println("  set bdiv <ratio>");
+    Serial.println("  set bmin <V>");
+    Serial.println("  set bmax <V>");
 }
 
 static void handleSetCommand(const String &key, const String &value)
@@ -80,6 +88,14 @@ static void handleSetCommand(const String &key, const String &value)
         cfg.adaptiveFilter = value.toInt() != 0;
     else if (key == "autozero")
         cfg.autoCalibrateOnBoot = value.toInt() != 0;
+    else if (key == "bpin")
+        cfg.batteryAdcPin = value.toInt();
+    else if (key == "bdiv")
+        cfg.batteryDivider = value.toFloat();
+    else if (key == "bmin")
+        cfg.batteryMinV = value.toFloat();
+    else if (key == "bmax")
+        cfg.batteryMaxV = value.toFloat();
     else
     {
         Serial.println("Parametro desconhecido.");
@@ -159,14 +175,18 @@ void setup()
     Serial.println();
     Serial.println("===== VARIO ESP32 =====");
 
+    displayBegin();
+
     if (!sensorBegin())
     {
         Serial.println("BME280 nao encontrado.");
+        displayMessage("BME280 ERRO", "SDA 8 SCL 9", "ADDR 76/77");
         while (true)
             delay(100);
     }
 
     Serial.println("Sensor OK");
+    displayMessage("BME280 OK", "Iniciando", nullptr);
 
     if (storageBegin())
     {
@@ -190,7 +210,6 @@ void setup()
     soundBegin(2);
     batteryBegin(cfg.batteryAdcPin, cfg.batteryDivider, cfg.batteryMinV, cfg.batteryMaxV);
     bleBegin(cfg.bleEnabled, cfg.bleName.c_str());
-    displayBegin();
     webBegin();
 
     Serial.printf(
@@ -221,6 +240,12 @@ void loop()
             pressureGet(),
             altitudeGet(),
             varioGet());
+        Serial.printf(
+            "BAT pin %d raw %d   %.2f V   %d%%\n",
+            batteryAdcPinGet(),
+            batteryRawGet(),
+            batteryVoltageGet(),
+            batteryPercentGet());
         lastPrint = millis();
     }
 

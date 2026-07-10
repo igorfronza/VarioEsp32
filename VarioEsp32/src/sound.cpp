@@ -43,10 +43,10 @@ static int clampi(int value, int minValue, int maxValue)
 
 static void normalizeConfig(SoundConfig &cfg)
 {
-    cfg.climbStart_mps = clampf(cfg.climbStart_mps, 0.08f, 5.0f);
-    cfg.climbStop_mps = clampf(cfg.climbStop_mps, 0.02f, cfg.climbStart_mps - 0.02f);
-    cfg.sinkStart_mps = clampf(cfg.sinkStart_mps, -8.0f, -0.18f);
-    cfg.sinkStop_mps = clampf(cfg.sinkStop_mps, cfg.sinkStart_mps, -0.15f);
+    cfg.climbStart_mps = clampf(cfg.climbStart_mps, 0.03f, 5.0f);
+    cfg.climbStop_mps = clampf(cfg.climbStop_mps, 0.00f, cfg.climbStart_mps - 0.01f);
+    cfg.sinkStart_mps = clampf(cfg.sinkStart_mps, -8.0f, -0.05f);
+    cfg.sinkStop_mps = clampf(cfg.sinkStop_mps, cfg.sinkStart_mps, -0.01f);
     cfg.climbBaseHz = clampi(cfg.climbBaseHz, 400, 2500);
     cfg.climbGainHzPerMps = clampi(cfg.climbGainHzPerMps, 50, 1000);
     cfg.sinkBaseHz = clampi(cfg.sinkBaseHz, 150, 1200);
@@ -118,7 +118,7 @@ void soundUpdate(float vario)
         int freq = g_cfg.climbBaseHz + (int)(climb * g_cfg.climbGainHzPerMps);
 
         unsigned long elapsed = millis() - last;
-        unsigned long interval = (unsigned long)clampf(120.0f - climb * 14.0f, 35.0f, 120.0f);
+        unsigned long interval = (unsigned long)clampf(90.0f - climb * 14.0f, 35.0f, 90.0f);
         unsigned long duration = (unsigned long)clampf(22.0f + climb * 2.5f, 14.0f, interval - 6);
 
         if (!toneOn && elapsed >= interval)

@@ -135,27 +135,31 @@ static String htmlPage()
     <meta name="viewport" content="width=device-width,initial-scale=1">
                 <title>Vario ESP32</title>
     <style>
-                        :root { --bg:#f6f1e7; --panel:#fffdf8; --ink:#1f1d19; --muted:#6f685f; --line:#d7ccbc; --sea:#0f766e; --amber:#b45309; --rose:#b91c1c; }
+                        :root { --bg:#f5f7f8; --panel:#ffffff; --ink:#172026; --muted:#5d6872; --line:#d7dee4; --sea:#0f766e; --blue:#2563eb; --amber:#b45309; --rose:#b91c1c; }
                         * { box-sizing:border-box; }
-                        body { margin:0; padding:16px; background:radial-gradient(circle at top,#f9f4ea,#efe6d3 70%); color:var(--ink); font-family:Georgia,"Times New Roman",serif; }
+                        body { margin:0; padding:16px; background:var(--bg); color:var(--ink); font-family:system-ui,-apple-system,Segoe UI,sans-serif; }
                         .wrap { max-width:980px; margin:0 auto; display:grid; gap:16px; }
-                        .panel { background:rgba(255,253,248,.94); border:1px solid var(--line); border-radius:20px; padding:18px; box-shadow:0 12px 28px rgba(60,40,10,.08); }
+                        .panel { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:18px; box-shadow:0 8px 18px rgba(20,35,50,.06); }
                         .hero { display:grid; gap:10px; }
-                        .eyebrow { display:inline-block; width:max-content; padding:5px 10px; border-radius:999px; background:#e3f5f2; color:#0c5d57; font-size:.82rem; }
+                        .eyebrow { display:inline-block; width:max-content; padding:5px 10px; border-radius:6px; background:#e3f5f2; color:#0c5d57; font-size:.82rem; }
                         h1,h2 { margin:0; }
                         p { margin:0; }
                         .muted { color:var(--muted); }
                         .grid { display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); }
-                        .metric { border:1px solid var(--line); border-radius:16px; padding:12px; background:#fffaf2; }
+                        .metric { border:1px solid var(--line); border-radius:8px; padding:12px; background:#f9fbfc; }
                         .metric .label { color:var(--muted); font-size:.9rem; }
                         .metric strong { display:block; margin-top:6px; font-size:1.45rem; }
                         form { display:grid; gap:14px; }
-                        .fields { display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); }
+                        .fields { display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); }
                         label { display:grid; gap:6px; font-size:.95rem; }
+                        label span:first-child { font-weight:650; }
+                        .help { color:var(--muted); font-size:.84rem; line-height:1.35; }
+                        .section-title { margin-top:8px; padding-top:14px; border-top:1px solid var(--line); color:#24313a; font-size:1rem; }
+                        .hint { border-left:4px solid var(--blue); background:#eef5ff; padding:10px 12px; border-radius:6px; color:#24313a; line-height:1.4; }
                         input, select, button { font:inherit; }
-                        input, select { width:100%; padding:11px 12px; border-radius:12px; border:1px solid #cfc4b3; background:#fff; color:var(--ink); }
+                        input, select { width:100%; padding:10px 11px; border-radius:6px; border:1px solid #c9d2db; background:#fff; color:var(--ink); }
                         .actions { display:flex; flex-wrap:wrap; gap:10px; }
-                        button { border:0; border-radius:999px; padding:11px 16px; cursor:pointer; color:#fff; background:var(--sea); }
+                        button { border:0; border-radius:6px; padding:11px 16px; cursor:pointer; color:#fff; background:var(--sea); }
                         button.alt { background:var(--amber); }
                         button.warn { background:var(--rose); }
                         .status { min-height:1.2rem; color:var(--muted); }
@@ -189,31 +193,42 @@ static String htmlPage()
                                 <h2>Configuracao</h2>
                                 <form id="config-form" style="margin-top:12px;">
                                         <div class="fields">
-                                                <label>QNH (hPa)<input name="qnh" type="number" step="0.01"></label>
-                                                <label>Offset altitude (m)<input name="offset" type="number" step="0.1"></label>
-                                                <label>Sensibilidade<input name="sens" type="number" step="0.01"></label>
-                                                <label>Zona morta (m/s)<input name="dead" type="number" step="0.01"></label>
-                                                <label>Resposta<select name="fast"><option value="1">Rapida</option><option value="0">Lenta</option></select></label>
-                                                <label>Filtro adaptativo<select name="adapt"><option value="1">Ligado</option><option value="0">Desligado</option></select></label>
-                                                <label>Autozero no boot<select name="autozero"><option value="1">Ligado</option><option value="0">Desligado</option></select></label>
-                                                <label>Volume buzzer (%)<input name="vol" type="number" min="0" max="100" step="1"></label>
-                                                <label>Subida start (m/s)<input name="cstart" type="number" step="0.01"></label>
-                                                <label>Subida stop (m/s)<input name="cstop" type="number" step="0.01"></label>
-                                                <label>Descida start (m/s)<input name="sstart" type="number" step="0.01"></label>
-                                                <label>Descida stop (m/s)<input name="sstop" type="number" step="0.01"></label>
-                                                <label>Tom subida base (Hz)<input name="cbase" type="number" step="1"></label>
-                                                <label>Tom subida ganho (Hz/m/s)<input name="cgain" type="number" step="1"></label>
-                                                <label>Tom descida base (Hz)<input name="sbase" type="number" step="1"></label>
-                                                <label>Som de descida<select name="sink_en"><option value="1">Ligado</option><option value="0">Desligado</option></select></label>
-                                                <label>BLE<select name="ble_en"><option value="1">Ligado</option><option value="0">Desligado</option></select></label>
-                                                <label>Nome BLE<input name="ble_name" type="text" maxlength="20"></label>
-                                                <label>Modo Wi-Fi<select name="wifi_mode"><option value="ap">AP (rede propria)</option><option value="sta">STA (entrar na sua rede)</option></select></label>
-                                                <label>Wi-Fi SSID (STA)<input name="sta_ssid" type="text" maxlength="32"></label>
-                                                <label>Wi-Fi Senha (STA)<input name="sta_password" type="password" maxlength="64"></label>
-                                                <label>Pino ADC bateria<input name="bpin" type="number" step="1"></label>
-                                                <label>Divisor bateria<input name="bdiv" type="number" step="0.01"></label>
-                                                <label>Bateria minima (V)<input name="bmin" type="number" step="0.01"></label>
-                                                <label>Bateria maxima (V)<input name="bmax" type="number" step="0.01"></label>
+                                                <div class="hint" style="grid-column:1/-1;">Para resposta mais rapida no beep de subida: use Resposta = Rapida, Filtro adaptativo = Ligado, Zona morta baixa (0.03 a 0.06) e Limiar de subida baixo (0.05 a 0.10 m/s).</div>
+
+                                                <h3 class="section-title" style="grid-column:1/-1;">Voo e altitude</h3>
+                                                <label><span>QNH (hPa)</span><input name="qnh" type="number" step="0.01"><small class="help">Pressao ao nivel do mar usada para calcular altitude. Exemplo: se o app/metar local mostra 1015.20 hPa, coloque 1015.20.</small></label>
+                                                <label><span>Offset de altitude (m)</span><input name="offset" type="number" step="0.1"><small class="help">Soma ou subtrai metros da altitude indicada. Exemplo: se marca 20 m a menos, use +20.</small></label>
+                                                <label><span>Sensibilidade do vario</span><input name="sens" type="number" step="0.01"><small class="help">Multiplica a velocidade vertical calculada. Valor maior reage mais forte e pode apitar mais cedo, mas tambem aumenta ruido.</small></label>
+                                                <label><span>Zona morta (m/s)</span><input name="dead" type="number" step="0.01"><small class="help">Movimentos menores que isso viram zero. Menor = mais sensivel. Para resposta rapida, tente 0.03 a 0.06.</small></label>
+                                                <label><span>Resposta do filtro</span><select name="fast"><option value="1">Rapida</option><option value="0">Lenta</option></select><small class="help">Rapida apita antes quando comeca a subir. Lenta fica mais suave, mas atrasa a resposta.</small></label>
+                                                <label><span>Filtro adaptativo</span><select name="adapt"><option value="1">Ligado</option><option value="0">Desligado</option></select><small class="help">Quando ligado, filtra mais parado e responde mais rapido quando detecta movimento real.</small></label>
+                                                <label><span>Autozero no boot</span><select name="autozero"><option value="1">Ligado</option><option value="0">Desligado</option></select><small class="help">Zera a altitude ao ligar. Bom para voo local; desligue se quer altitude baseada no QNH.</small></label>
+
+                                                <h3 class="section-title" style="grid-column:1/-1;">Limiar dos apitos estilo FlySkyHy</h3>
+                                                <label><span>Limiar de subida (m/s)</span><input name="cstart" type="number" step="0.01"><small class="help">Comeca o beep de subida quando o vario passa deste valor. Menor = apita mais cedo. Exemplo rapido: 0.05.</small></label>
+                                                <label><span>Parar beep de subida (m/s)</span><input name="cstop" type="number" step="0.01"><small class="help">Para o beep quando a subida cai abaixo deste valor. Deve ser menor que o limiar de subida. Exemplo: 0.02.</small></label>
+                                                <label><span>Limiar de descendente (m/s)</span><input name="sstart" type="number" step="0.01"><small class="help">Comeca o som de descida quando o vario fica mais negativo que isso. Exemplo: -0.60 apita so em afundamento claro.</small></label>
+                                                <label><span>Parar som de descida (m/s)</span><input name="sstop" type="number" step="0.01"><small class="help">Para o som de descida quando melhora acima deste valor. Exemplo: -0.20.</small></label>
+
+                                                <h3 class="section-title" style="grid-column:1/-1;">Som do buzzer</h3>
+                                                <label><span>Volume buzzer (%)</span><input name="vol" type="number" min="0" max="100" step="1"><small class="help">Intensidade desejada do buzzer. Em buzzer passivo simples pode ter pouco efeito.</small></label>
+                                                <label><span>Tom base de subida (Hz)</span><input name="cbase" type="number" step="1"><small class="help">Frequencia inicial do beep de subida. Valor maior deixa o beep mais agudo.</small></label>
+                                                <label><span>Ganho do tom de subida (Hz por m/s)</span><input name="cgain" type="number" step="1"><small class="help">Quanto o tom sobe conforme a subida fica mais forte. Maior = muda mais rapido para agudo.</small></label>
+                                                <label><span>Tom base de descida (Hz)</span><input name="sbase" type="number" step="1"><small class="help">Frequencia do som de descendente. Valor menor deixa o som mais grave.</small></label>
+                                                <label><span>Som de descida</span><select name="sink_en"><option value="1">Ligado</option><option value="0">Desligado</option></select><small class="help">Liga ou desliga o aviso sonoro quando estiver afundando.</small></label>
+
+                                                <h3 class="section-title" style="grid-column:1/-1;">Bateria</h3>
+                                                <label><span>Pino ADC bateria</span><input name="bpin" type="number" step="1"><small class="help">GPIO que recebe o meio do divisor resistivo da bateria. Exemplo: GPIO0 se voce ligar o divisor no GPIO0.</small></label>
+                                                <label><span>Divisor bateria</span><input name="bdiv" type="number" step="0.01"><small class="help">Fator do divisor. Com 100k em cima e 100k embaixo, use 2.00.</small></label>
+                                                <label><span>Bateria minima (V)</span><input name="bmin" type="number" step="0.01"><small class="help">Tensao considerada 0%. Para Li-ion 1S, 3.30 V e conservador.</small></label>
+                                                <label><span>Bateria maxima (V)</span><input name="bmax" type="number" step="0.01"><small class="help">Tensao considerada 100%. Para Li-ion 1S carregada, use 4.20 V.</small></label>
+
+                                                <h3 class="section-title" style="grid-column:1/-1;">BLE e Wi-Fi</h3>
+                                                <label><span>BLE</span><select name="ble_en"><option value="1">Ligado</option><option value="0">Desligado</option></select><small class="help">Envia dados para apps compatíveis por Bluetooth Low Energy.</small></label>
+                                                <label><span>Nome BLE</span><input name="ble_name" type="text" maxlength="20"><small class="help">Nome que aparece no celular ao procurar o variometro.</small></label>
+                                                <label><span>Modo Wi-Fi</span><select name="wifi_mode"><option value="ap">AP (rede propria)</option><option value="sta">STA (entrar na sua rede)</option></select><small class="help">AP cria a rede VarioESP32. STA conecta na sua rede Wi-Fi.</small></label>
+                                                <label><span>Wi-Fi SSID (STA)</span><input name="sta_ssid" type="text" maxlength="32"><small class="help">Nome da rede Wi-Fi usada no modo STA.</small></label>
+                                                <label><span>Wi-Fi Senha (STA)</span><input name="sta_password" type="password" maxlength="64"><small class="help">Senha da rede Wi-Fi. Deixe em branco se nao for usar STA.</small></label>
                                         </div>
                                         <div class="actions">
                                                 <button type="submit">Aplicar e salvar</button>
