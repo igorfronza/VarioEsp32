@@ -32,13 +32,13 @@ static float pressureToAltitude(float pressure_hPa, float qnh_hPa)
 
 static float altitudeAlpha()
 {
-    return g_fastResponse ? 0.24f : 0.06f;
+    return g_fastResponse ? 0.14f : 0.06f;
 }
 
 static float varioAlpha(float instantVario)
 {
-    float baseAlpha = g_fastResponse ? 0.32f : 0.07f;
-    float maxAlpha = g_fastResponse ? 0.58f : 0.14f;
+    float baseAlpha = g_fastResponse ? 0.20f : 0.07f;
+    float maxAlpha = g_fastResponse ? 0.36f : 0.14f;
 
     if (!g_adaptiveFilter)
         return baseAlpha;

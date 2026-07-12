@@ -11,12 +11,17 @@ enum ToneMode
 };
 
 static ToneMode toneMode = TONE_IDLE;
+static ToneMode lastToneMode = TONE_IDLE;
+static bool toneRunning = false;
+
+static const uint8_t CLIMB_ENTER_SAMPLES = 4;
+static const uint8_t SINK_ENTER_SAMPLES = 5;
 
 static SoundConfig g_cfg = {
-    0.10f,
-    0.05f,
-    -0.22f,
-    -0.10f,
+    0.20f,
+    0.08f,
+    -0.60f,
+    -0.20f,
     1100,
     280,
     240,
@@ -43,9 +48,9 @@ static int clampi(int value, int minValue, int maxValue)
 
 static void normalizeConfig(SoundConfig &cfg)
 {
-    cfg.climbStart_mps = clampf(cfg.climbStart_mps, 0.03f, 5.0f);
-    cfg.climbStop_mps = clampf(cfg.climbStop_mps, 0.00f, cfg.climbStart_mps - 0.01f);
-    cfg.sinkStart_mps = clampf(cfg.sinkStart_mps, -8.0f, -0.05f);
+    cfg.climbStart_mps = clampf(cfg.climbStart_mps, 0.15f, 5.0f);
+    cfg.climbStop_mps = clampf(cfg.climbStop_mps, 0.05f, cfg.climbStart_mps - 0.03f);
+    cfg.sinkStart_mps = clampf(cfg.sinkStart_mps, -8.0f, -0.40f);
     cfg.sinkStop_mps = clampf(cfg.sinkStop_mps, cfg.sinkStart_mps, -0.01f);
     cfg.climbBaseHz = clampi(cfg.climbBaseHz, 400, 2500);
     cfg.climbGainHzPerMps = clampi(cfg.climbGainHzPerMps, 50, 1000);
@@ -55,18 +60,29 @@ static void normalizeConfig(SoundConfig &cfg)
 
 static void toneStop()
 {
-    noTone(buzzerPin);
+    if (toneRunning)
+    {
+        noTone(buzzerPin);
+        toneRunning = false;
+    }
+
+    // Some ESP32 tone/noTone implementations detach LEDC from the pin.
+    // Reassert GPIO mode before driving LOW to avoid __digitalWrite() errors.
+    pinMode(buzzerPin, OUTPUT);
+    digitalWrite(buzzerPin, LOW);
 }
 
 static void toneStart(int freq)
 {
     tone(buzzerPin, freq);
+    toneRunning = true;
 }
 
 void soundBegin(int gpio)
 {
     buzzerPin = gpio;
     pinMode(buzzerPin, OUTPUT);
+    digitalWrite(buzzerPin, LOW);
     toneStop();
 }
 
@@ -78,17 +94,44 @@ void soundSetConfig(const SoundConfig &cfg)
 
 void soundUpdate(float vario)
 {
-    static unsigned long last = 0;
+    static unsigned long segmentStart = 0;
+    static unsigned long climbOnMs = 60;
+    static unsigned long climbOffMs = 180;
     static int currentFreq = 0;
     static bool toneOn = false;
+    static uint8_t sinkStep = 0;
+    static uint8_t climbEntryCount = 0;
+    static uint8_t sinkEntryCount = 0;
 
     normalizeConfig(g_cfg);
+
+    unsigned long now = millis();
 
     if (toneMode == TONE_IDLE)
     {
         if (vario >= g_cfg.climbStart_mps)
+        {
+            if (climbEntryCount < 255)
+                climbEntryCount++;
+        }
+        else
+        {
+            climbEntryCount = 0;
+        }
+
+        if (g_cfg.sinkToneEnabled && vario <= g_cfg.sinkStart_mps)
+        {
+            if (sinkEntryCount < 255)
+                sinkEntryCount++;
+        }
+        else
+        {
+            sinkEntryCount = 0;
+        }
+
+        if (climbEntryCount >= CLIMB_ENTER_SAMPLES)
             toneMode = TONE_CLIMB;
-        else if (g_cfg.sinkToneEnabled && vario <= g_cfg.sinkStart_mps)
+        else if (sinkEntryCount >= SINK_ENTER_SAMPLES)
             toneMode = TONE_SINK;
     }
     else if (toneMode == TONE_CLIMB)
@@ -102,13 +145,31 @@ void soundUpdate(float vario)
             toneMode = TONE_IDLE;
     }
 
+    if (toneMode != lastToneMode)
+    {
+        toneStop();
+        toneOn = false;
+        currentFreq = 0;
+        sinkStep = 0;
+        segmentStart = now;
+        climbEntryCount = 0;
+        sinkEntryCount = 0;
+
+        if (toneMode == TONE_CLIMB)
+        {
+            // Start first climb beep immediately when mode engages.
+            climbOffMs = 0;
+        }
+
+        lastToneMode = toneMode;
+    }
+
     if (toneMode == TONE_IDLE)
     {
         if (toneOn)
             toneStop();
         currentFreq = 0;
         toneOn = false;
-        last = millis();
         return;
     }
 
@@ -117,67 +178,86 @@ void soundUpdate(float vario)
         float climb = clampf(vario, 0.0f, 8.0f);
         int freq = g_cfg.climbBaseHz + (int)(climb * g_cfg.climbGainHzPerMps);
 
-        unsigned long elapsed = millis() - last;
-        unsigned long interval = (unsigned long)clampf(90.0f - climb * 14.0f, 35.0f, 90.0f);
-        unsigned long duration = (unsigned long)clampf(22.0f + climb * 2.5f, 14.0f, interval - 6);
+        unsigned long period = (unsigned long)clampf(360.0f - climb * 55.0f, 90.0f, 360.0f);
+        unsigned long onMs = (unsigned long)clampf(55.0f + climb * 4.0f, 45.0f, 80.0f);
+        unsigned long offMs = period > onMs ? (period - onMs) : 20;
+        unsigned long elapsed = now - segmentStart;
 
-        if (!toneOn && elapsed >= interval)
+        if (toneOn)
+        {
+            if (elapsed >= climbOnMs)
+            {
+                toneStop();
+                toneOn = false;
+                climbOffMs = offMs;
+                segmentStart = now;
+            }
+        }
+        else if (elapsed >= climbOffMs)
         {
             toneStart(freq);
             toneOn = true;
             currentFreq = freq;
-            last = millis();
-        }
-        else if (toneOn && elapsed >= duration)
-        {
-            toneStop();
-            toneOn = false;
-            last = millis();
+            climbOnMs = onMs;
+            segmentStart = now;
         }
 
         return;
     }
 
-    float sink = clampf(fabsf(vario), 0.0f, 8.0f);
-    int freq = g_cfg.sinkBaseHz + (int)(sink * 40.0f);
-    bool graveEnough = (freq <= 320) || (sink >= 1.6f && freq <= 360);
-    unsigned long interval = (unsigned long)clampf(260.0f - sink * 18.0f, 120.0f, 320.0f);
-    unsigned long duration = (unsigned long)clampf(interval * 0.86f, 60.0f, interval - 12);
+    const int sinkFreq = g_cfg.sinkBaseHz;
+    const unsigned long onMs = 85;
+    const unsigned long shortOffMs = 70;
+    const unsigned long longOffMs = 260;
+    unsigned long elapsed = now - segmentStart;
 
-    unsigned long elapsed = millis() - last;
-    if (graveEnough)
+    if (sinkStep == 0)
     {
-        if (!toneOn || abs(freq - currentFreq) >= 8 || elapsed >= 160)
+        if (!toneOn)
         {
-            toneStart(freq);
+            toneStart(sinkFreq);
             toneOn = true;
-            currentFreq = freq;
-            last = millis();
+            currentFreq = sinkFreq;
+            segmentStart = now;
+        }
+        else if (elapsed >= onMs)
+        {
+            toneStop();
+            toneOn = false;
+            sinkStep = 1;
+            segmentStart = now;
         }
         return;
     }
 
-    if (sink < 1.0f)
+    if (sinkStep == 1)
     {
-        if (!toneOn && elapsed >= interval)
+        if (elapsed >= shortOffMs)
         {
-            toneStart(freq);
+            toneStart(sinkFreq);
             toneOn = true;
-            currentFreq = freq;
-            last = millis();
+            currentFreq = sinkFreq;
+            sinkStep = 2;
+            segmentStart = now;
         }
-        else if (toneOn && elapsed >= duration)
+        return;
+    }
+
+    if (sinkStep == 2)
+    {
+        if (elapsed >= onMs)
         {
             toneStop();
             toneOn = false;
-            last = millis();
+            sinkStep = 3;
+            segmentStart = now;
         }
+        return;
     }
-    else if (!toneOn || abs(freq - currentFreq) >= 10 || elapsed >= 140)
+
+    if (elapsed >= longOffMs)
     {
-        toneStart(freq);
-        toneOn = true;
-        currentFreq = freq;
-        last = millis();
+        sinkStep = 0;
+        segmentStart = now;
     }
 }

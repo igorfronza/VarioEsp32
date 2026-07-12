@@ -9,6 +9,15 @@ static float g_maxV = 4.2f;
 static float g_voltage = 0.0f;
 static int g_raw = 0;
 static bool g_hasReading = false;
+static float g_percentSmoothed = 0.0f;
+static int g_percentDisplay = 0;
+static bool g_hasPercent = false;
+static unsigned long g_lastPercentStepMs = 0;
+
+static const float VOLTAGE_ALPHA = 0.04f;
+static const float PERCENT_ALPHA = 0.03f;
+static const float PERCENT_HYSTERESIS = 2.0f;
+static const unsigned long PERCENT_STEP_INTERVAL_MS = 2500;
 
 static float clampf(float value, float minValue, float maxValue)
 {
@@ -39,7 +48,12 @@ void batteryBegin(int adcPin, float divider, float minV, float maxV)
 void batteryUpdate()
 {
     const float adcMax = 4095.0f;
-    int raw = analogRead(g_adcPin);
+    const int sampleCount = 8;
+    long sum = 0;
+    for (int i = 0; i < sampleCount; ++i)
+        sum += analogRead(g_adcPin);
+
+    int raw = (int)(sum / sampleCount);
     g_raw = raw;
     float vSense = (raw / adcMax) * 3.3f;
     float vBat = vSense * g_divider;
@@ -51,9 +65,47 @@ void batteryUpdate()
     }
     else
     {
-        // Low-pass para reduzir ruido da leitura ADC.
-        g_voltage = 0.12f * vBat + 0.88f * g_voltage;
+        // Filtro lento para estabilizar leitura em placa com ruido de ADC.
+        g_voltage = VOLTAGE_ALPHA * vBat + (1.0f - VOLTAGE_ALPHA) * g_voltage;
     }
+
+    float p = (g_voltage - g_minV) / (g_maxV - g_minV);
+    p = clampf(p, 0.0f, 1.0f) * 100.0f;
+
+    // On USB power many boards keep battery rail near charge voltage,
+    // so reported percentage can stay close to 100% with little variation.
+
+    if (!g_hasPercent)
+    {
+        g_percentSmoothed = p;
+        g_percentDisplay = (int)(p + 0.5f);
+        g_hasPercent = true;
+        g_lastPercentStepMs = millis();
+        return;
+    }
+
+    g_percentSmoothed = PERCENT_ALPHA * p + (1.0f - PERCENT_ALPHA) * g_percentSmoothed;
+
+    unsigned long now = millis();
+    if (now - g_lastPercentStepMs < PERCENT_STEP_INTERVAL_MS)
+        return;
+
+    // Histerese maior para evitar oscilacao de alguns pontos percentuais.
+    if (g_percentSmoothed >= (float)g_percentDisplay + PERCENT_HYSTERESIS)
+    {
+        g_percentDisplay++;
+        g_lastPercentStepMs = now;
+    }
+    else if (g_percentSmoothed <= (float)g_percentDisplay - PERCENT_HYSTERESIS)
+    {
+        g_percentDisplay--;
+        g_lastPercentStepMs = now;
+    }
+
+    if (g_percentDisplay < 0)
+        g_percentDisplay = 0;
+    if (g_percentDisplay > 100)
+        g_percentDisplay = 100;
 }
 
 float batteryVoltageGet()
@@ -73,9 +125,7 @@ int batteryAdcPinGet()
 
 int batteryPercentGet()
 {
-    float p = (g_voltage - g_minV) / (g_maxV - g_minV);
-    p = clampf(p, 0.0f, 1.0f);
-    return (int)(p * 100.0f + 0.5f);
+    return g_percentDisplay;
 }
 
 bool batteryLowGet()
