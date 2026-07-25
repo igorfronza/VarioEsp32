@@ -1,0 +1,45 @@
+=== RESUMO DA CONVERSA - VARIO ESP32 ===
+Abrir esta pasta no VS Code: c:\arduino\VarioEsp32\VarioEsp32\VarioEsp32
+(É onde está o platformio.ini)
+
+=== ALTERAÇÕES JÁ FEITAS NO CÓDIGO ===
+
+1. display.cpp - Display redesenhado (72x40 SSD1306):
+   - Lado esquerdo: barra de bateria VERTICAL + porcentagem abaixo
+   - Lado direito: taxa de vario (1 digito + 1 decimal), ex: "+1.5" / "-2.3" / " 0.0"
+   - Fonte grande logisoso16 para o número do vario
+
+2. storage.h / storage.cpp - Campo apPassword:
+   - Adicionado "String apPassword" no VarioConfig
+   - Default: "12345678"
+   - Persistido como "appass" no NVS (Preferences)
+   - STORAGE_VERSION: 7 -> 8
+   - Se vazio, normaliza para "12345678"
+
+3. main.cpp - Comandos seriais:
+   - "set password <senha>" - altera senha do AP
+   - "show" exibe ap_pass
+   - "help" lista o novo comando
+
+4. web.cpp - Senha AP configurável:
+   - Removeu constante AP_PASSWORD hardcoded
+   - startAp() agora usa cfg.apPassword
+   - Campo "Senha do AP (rede propria)" no formulario HTML
+   - configJson inclui apPassword
+   - updateConfigFromForm le ap_password do POST
+   - setConfigForm preenche ap_password no JS
+
+=== PARA UPLOAD ===
+Abrir c:\arduino\VarioEsp32\VarioEsp32\VarioEsp32 no VS Code.
+Clicar no botao Upload (→) da barra inferior do PlatformIO.
+Primeiro build demora (download de ~200MB de dependencias).
+Depois vai em ~30 segundos.
+
+=== ERROS DE INTELLISENSE ===
+Se aparecer erro de includePath depois do build:
+Ctrl+Shift+P -> "PlatformIO: Rebuild IntelliSense Index"
+Nao afeta compilacao real.
+
+=== PRÓXIMOS PASSOS (sugestoes dadas) ===
+- Melhorar filtro do vario (aumentar taxa de amostragem de 5Hz pra 25Hz+)
+- Melhorias sao possiveis sem trocar hardware (BME280 fica)
