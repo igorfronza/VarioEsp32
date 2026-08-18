@@ -27,14 +27,13 @@ static unsigned long g_forceSinkStartMs = 0;
 // Slider da interface web: vario simulado contínuo, sem rampa nem debounce.
 static float g_simVarioMps = 0.0f;
 static unsigned long g_simVarioUntilMs = 0;
-static const unsigned long SIM_VARIO_TIMEOUT_MS = 600;
+static const unsigned long SIM_VARIO_TIMEOUT_MS = 5000;
 
 // Rampa de teste: sobe/desce suavemente em 1 segundo (simula entrada real em térmica).
 static const unsigned long TEST_RAMP_MS = 1000;
 
 static const uint8_t CLIMB_ENTER_SAMPLES = 4;
 static const uint8_t SINK_ENTER_SAMPLES = 5;
-static const float BEEP_VELOCITY_SENSITIVITY = 0.10f;
 static const unsigned long MODE_EVAL_INTERVAL_MS = 180;
 
 static SoundConfig g_cfg = {
@@ -78,17 +77,85 @@ static void normalizeConfig(SoundConfig &cfg)
     cfg.volumePct = clampi(cfg.volumePct, 0, 100);
 }
 
-static void toneStop()
+// Curva de cadência estilo FlySkyHy/XC Tracer: perto do limiar o bipe é curto
+// e esparso (duty baixo), e vai ficando mais cheio/rápido conforme a subida ou
+// afundamento aumenta, até soar quase contínuo em valores fortes.
+// Cada linha é {taxa_absoluta_mps, periodo_ms, duty_%}; interpola linearmente
+// entre pontos e satura fora da tabela.
+struct ToneBreakpoint
 {
-    if (toneRunning)
+    float rate;
+    float periodMs;
+    float dutyPct;
+};
+
+static const ToneBreakpoint CLIMB_CURVE[] = {
+    {0.0f, 550.0f, 20.0f},
+    {0.5f, 480.0f, 28.0f},
+    {1.0f, 400.0f, 38.0f},
+    {2.0f, 300.0f, 55.0f},
+    {3.0f, 230.0f, 68.0f},
+    {4.0f, 180.0f, 78.0f},
+    {5.0f, 140.0f, 88.0f},
+};
+
+static const ToneBreakpoint SINK_CURVE[] = {
+    {0.0f, 400.0f, 35.0f},
+    {1.0f, 320.0f, 45.0f},
+    {2.0f, 260.0f, 55.0f},
+    {4.0f, 200.0f, 68.0f},
+    {6.0f, 160.0f, 80.0f},
+};
+
+static void toneCadence(const ToneBreakpoint *curve, int count, float rate, unsigned long &periodMs, unsigned long &onMs)
+{
+    if (rate <= curve[0].rate)
     {
-        ledcDetach(buzzerPin);
-        toneRunning = false;
+        periodMs = (unsigned long)curve[0].periodMs;
+        onMs = (unsigned long)(curve[0].periodMs * curve[0].dutyPct / 100.0f);
+        return;
     }
 
-    // Keep a strong low level while idle to better shunt coupled noise.
-    pinMode(buzzerPin, OUTPUT);
-    digitalWrite(buzzerPin, LOW);
+    for (int i = 0; i < count - 1; i++)
+    {
+        const ToneBreakpoint &a = curve[i];
+        const ToneBreakpoint &b = curve[i + 1];
+        if (rate <= b.rate)
+        {
+            float t = (rate - a.rate) / (b.rate - a.rate);
+            float period = a.periodMs + (b.periodMs - a.periodMs) * t;
+            float duty = a.dutyPct + (b.dutyPct - a.dutyPct) * t;
+            periodMs = (unsigned long)period;
+            onMs = (unsigned long)(period * duty / 100.0f);
+            return;
+        }
+    }
+
+    const ToneBreakpoint &last = curve[count - 1];
+    periodMs = (unsigned long)last.periodMs;
+    onMs = (unsigned long)(last.periodMs * last.dutyPct / 100.0f);
+}
+
+static bool ledcAttached = false;
+
+// Mantém o canal LEDC sempre anexado e apenas alterna duty/freq entre bipes.
+// Fazer attach/detach a cada bipe (varias vezes por segundo) reconfigura o
+// timer do zero e gera cliques/instabilidade audível — o silêncio entre
+// bipes é obtido com duty=0, não desanexando o pino.
+static void ledcEnsureAttached(int freq)
+{
+    if (!ledcAttached)
+    {
+        ledcAttach(buzzerPin, freq, BUZZER_LEDC_RESOLUTION);
+        ledcAttached = true;
+    }
+}
+
+static void toneStop()
+{
+    ledcEnsureAttached(g_cfg.climbBaseHz);
+    ledcWrite(buzzerPin, 0);
+    toneRunning = false;
 }
 
 static void toneStart(int freq)
@@ -96,9 +163,13 @@ static void toneStart(int freq)
     // Volume: mapeia 0-100% para duty 0-50% (meia onda é o máximo útil em buzzer passivo).
     int duty = map(g_cfg.volumePct, 0, 100, 0, 512);
     if (duty < 1)
+    {
+        toneRunning = false;
         return; // volume 0 = mudo
+    }
 
-    ledcAttach(buzzerPin, freq, BUZZER_LEDC_RESOLUTION);
+    ledcEnsureAttached(freq);
+    ledcChangeFrequency(buzzerPin, freq, BUZZER_LEDC_RESOLUTION);
     ledcWrite(buzzerPin, duty);
     toneRunning = true;
 }
@@ -111,9 +182,17 @@ void soundSetBootMuteMs(unsigned long muteMs)
 void soundBegin(int gpio)
 {
     buzzerPin = gpio;
+    // Apenas GPIO simples aqui: silencia o pino cedo, sem anexar o LEDC ainda.
+    // displayBegin() roda em seguida e sua varredura de pinos do OLED também
+    // testa o pino do buzzer como candidato de I2C via pinMode/digitalWrite —
+    // se o LEDC já estivesse anexado nesse momento, essa varredura rouba o
+    // roteamento do pino e, como agora só anexamos uma vez (sem re-attach a
+    // cada bipe), o buzzer ficaria mudo pro resto da sessão. O attach real do
+    // LEDC é adiado (lazy, em toneStart/toneStop) até o primeiro bipe em
+    // soundUpdate(), que só ocorre depois que setup() (e a varredura) termina.
     pinMode(buzzerPin, OUTPUT);
     digitalWrite(buzzerPin, LOW);
-    toneStop();
+    toneRunning = false;
     soundSetBootMuteMs(3000);
 }
 
@@ -174,15 +253,11 @@ void soundUpdate(float vario)
 {
     static unsigned long segmentStart = 0;
     static unsigned long lastModeEvalMs = 0;
-    static unsigned long climbOnMs = 60;
-    static unsigned long climbOffMs = 180;
-    static unsigned long sinkOnMs = 260;
-    static unsigned long sinkOffMs = 180;
+    static unsigned long nextBeepMs = 0;       // quando iniciar o próximo bip
+    static unsigned long beepStopMs = 0;       // quando desligar o bip atual
     static int currentFreq = 0;
-    static bool toneOn = false;
     static uint8_t climbEntryCount = 0;
     static uint8_t sinkEntryCount = 0;
-    static float beepVelocity = 0.0f;
 
     normalizeConfig(g_cfg);
 
@@ -223,11 +298,11 @@ void soundUpdate(float vario)
         toneStop();
         toneMode = TONE_SILENT;
         lastToneMode = TONE_SILENT;
-        toneOn = false;
         currentFreq = 0;
         climbEntryCount = 0;
         sinkEntryCount = 0;
-        beepVelocity = 0.0f;
+        nextBeepMs = 0;
+        beepStopMs = 0;
         segmentStart = now;
         return;
     }
@@ -284,115 +359,73 @@ void soundUpdate(float vario)
     if (toneMode != lastToneMode)
     {
         toneStop();
-        toneOn = false;
         currentFreq = 0;
         segmentStart = now;
         climbEntryCount = 0;
         sinkEntryCount = 0;
-        beepVelocity = effectiveVario;
-
-        if (toneMode == TONE_CLIMB)
-        {
-            // Start first climb beep immediately when mode engages.
-            climbOffMs = 0;
-        }
-        else if (toneMode == TONE_SINK)
-        {
-            // Start first sink beep immediately when mode engages.
-            sinkOffMs = 0;
-        }
+        nextBeepMs = 0;
+        beepStopMs = 0;
 
         lastToneMode = toneMode;
     }
 
     if (toneMode == TONE_SILENT)
     {
-        if (toneOn)
+        if (toneRunning)
             toneStop();
         currentFreq = 0;
-        toneOn = false;
         return;
     }
 
     if (toneMode == TONE_CLIMB)
     {
-        // --- SUBIDA: cadência e frequência proporcionais à taxa de subida ---
-        // Referência: lógica clássica de variômetros (BlueFly, XC Tracer, FlySkyHy).
+        // --- SUBIDA: cadência estilo FlySkyHy/XC Tracer ---
+        // Perto do limiar o bipe é curto e espaçado; conforme a subida cresce,
+        // o período encurta e o duty cycle aumenta até soar quase contínuo.
         float climb = clampf(effectiveVario, 0.0f, 8.0f);
-        if (fabsf(climb - beepVelocity) >= BEEP_VELOCITY_SENSITIVITY)
-            beepVelocity = climb;
 
-        // Frequência: base + ganho * m/s  (tom mais agudo = mais lift)
-        int freq = g_cfg.climbBaseHz + (int)(beepVelocity * g_cfg.climbGainHzPerMps);
-
-        // Cadência: escala não-linear agressiva.
-        //  0.2 m/s → ~420 ms  (~2.4 bips/s)
-        //  1.0 m/s → ~230 ms  (~4.3 bips/s)
-        //  3.0 m/s → ~120 ms  (~8.3 bips/s)
-        //  5.0 m/s → ~100 ms  (10 bips/s, quase contínuo)
-        unsigned long period = (unsigned long)clampf(480.0f / (0.40f + beepVelocity * 0.85f), 85.0f, 520.0f);
-
-        // Duração do bip: ~70-88 ms, ligeiramente mais longo em lift forte.
-        unsigned long onMs = (unsigned long)clampf(64.0f + beepVelocity * 4.5f, 60.0f, 90.0f);
-        unsigned long offMs = period > onMs ? (period - onMs) : 25;
-        unsigned long elapsed = now - segmentStart;
-
-        if (toneOn)
+        if (!toneRunning && now >= nextBeepMs)
         {
-            if (elapsed >= climbOnMs)
-            {
-                toneStop();
-                toneOn = false;
-                climbOffMs = offMs;
-                segmentStart = now;
-            }
-        }
-        else if (elapsed >= climbOffMs)
-        {
+            int freq = g_cfg.climbBaseHz + (int)(climb * g_cfg.climbGainHzPerMps);
+
+            unsigned long period, onMs;
+            toneCadence(CLIMB_CURVE, sizeof(CLIMB_CURVE) / sizeof(CLIMB_CURVE[0]), climb, period, onMs);
+
             toneStart(freq);
-            toneOn = true;
             currentFreq = freq;
-            climbOnMs = onMs;
-            segmentStart = now;
+            beepStopMs = now + onMs;
+            nextBeepMs = now + period;
+        }
+
+        if (toneRunning && now >= beepStopMs)
+        {
+            toneStop();
         }
 
         return;
     }
 
-    // --- DESCIDA: frequência proporcional ao sink, padrão pulsado ---
-    // Tom mais grave = afundando mais rápido.
-    float sink = clampf(-effectiveVario, 0.0f, 8.0f); // magnitude positiva do sink
-    int sinkFreq = g_cfg.sinkBaseHz - (int)(sink * 28.0f);
-    if (sinkFreq < 130)
-        sinkFreq = 130;
-
-    // Cadência de sink: pulsos mais frequentes conforme sink aumenta.
-    //  0.6 m/s → período ~550 ms
-    //  2.0 m/s → período ~350 ms
-    //  5.0 m/s → período ~240 ms
-    unsigned long sinkPeriod = (unsigned long)clampf(640.0f - sink * 82.0f, 200.0f, 640.0f);
-
-    // Duração do pulso de sink proporcional ao sink.
-    unsigned long sOnMs = (unsigned long)clampf(100.0f + sink * 32.0f, 90.0f, 260.0f);
-    unsigned long sOffMs = sinkPeriod > sOnMs ? (sinkPeriod - sOnMs) : 60;
-    unsigned long sElapsed = now - segmentStart;
-
-    if (toneOn)
+    // --- DESCIDA: mesma ideia, curva própria (mais grave, menos esparsa) ---
     {
-        if (sElapsed >= sinkOnMs)
+        float sinkMag = clampf(-effectiveVario, 0.0f, 8.0f);
+
+        if (!toneRunning && now >= nextBeepMs)
+        {
+            int freq = g_cfg.sinkBaseHz - (int)(sinkMag * 30.0f);
+            if (freq < 120) freq = 120;
+
+            unsigned long period, onMs;
+            toneCadence(SINK_CURVE, sizeof(SINK_CURVE) / sizeof(SINK_CURVE[0]), sinkMag, period, onMs);
+
+            toneStart(freq);
+            currentFreq = freq;
+            beepStopMs = now + onMs;
+            nextBeepMs = now + period;
+        }
+
+        if (toneRunning && now >= beepStopMs)
         {
             toneStop();
-            toneOn = false;
-            segmentStart = now;
-            sinkOffMs = sOffMs;
         }
-    }
-    else if (sElapsed >= sinkOffMs)
-    {
-        toneStart(sinkFreq);
-        toneOn = true;
-        currentFreq = sinkFreq;
-        sinkOnMs = sOnMs;
-        segmentStart = now;
     }
 }
